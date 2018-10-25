@@ -48,10 +48,59 @@ var playerIdMap = {
   7: 5 // orange
 }
 
+function arrayBufferToUint8Array(buffer){
+    var arr = new Uint8Array(buffer);
+    return arr;
+}
+
+function centralizeX(buffer, width, amount, begining){
+    var arr = []
+    for(var i = 0; i < buffer.length; ++i){
+      if(i%(width*4) == 0 && (i || begining)) 
+        for(var j = 0; j < amount; ++j){
+          arr.push(0, 0, 0, 0)
+        }
+      arr.push(buffer[i])
+    }
+    if(!begining) arr.push(0, 0, 0, 0)
+    var res = new Uint8Array(arr.length)
+    for (var i = 0; i < arr.length; i++) {
+      res[i] = arr[i]
+    }
+    return res
+}
+
+function centralizeY(buffer, width, amount, begining){
+    var arr = []
+    if(begining){
+      for(var i = 0; i < amount; ++i){
+        for(var j = 0; j < width; ++j){
+          arr.push(0, 0, 0, 0)
+        }
+      }
+    }
+    for(var i = 0; i < buffer.length; ++i){
+      arr.push(buffer[i])
+    }
+    if(!begining){
+      for(var i = 0; i < amount; ++i){
+        for(var j = 0; j < width; ++j){
+          arr.push(0, 0, 0, 0)
+        }
+      }
+    }
+    var res = new Uint8Array(arr.length)
+    for (var i = 0; i < arr.length; i++) {
+      res[i] = arr[i]
+    }
+    return res
+}
+
 function inspect (file) {
   var slp = SLP(fs.readFileSync(file))
   slp.parseHeader()
-
+  var palette = Palette(fs.readFileSync(flags.palette || defaultPalette, 'ascii'))
+  var player = flags.player == null ? 1 : (playerIdMap[flags.player] || flags.player)
   var lines = [
     'Version: ' + slp.version,
     'Comment: ' + slp.comment,
@@ -84,11 +133,19 @@ function run (file, outDir) {
       player: player,
       drawOutline: drawOutline
     })
+    var arr = arrayBufferToUint8Array(frame.data.buffer)
+    var centerX = parseInt(frame.width/2)
+    var diffX = Math.abs(centerX - slp.frames[i].hotspot.x)
+    var centerY = parseInt(frame.height/2)
+    var diffY = Math.abs(centerY - slp.frames[i].hotspot.y)
+    
     var png = new PNG({
-      width: frame.width,
-      height: frame.height
+      width: frame.width + diffX*2,
+      height: frame.height + diffY*2
     })
-    png.data = Buffer.from(frame.data.buffer)
+    //png.data = Buffer.from(frame.data.buffer)
+    png.data = Buffer.from(centralizeY(arrayBufferToUint8Array(centralizeX(arr, frame.width, diffX*2, centerX > slp.frames[i].hotspot.x).buffer),
+                                       png.width, diffY*2, centerY > slp.frames[i].hotspot.y).buffer)
     png.pack().pipe(
       fs.createWriteStream(path.join(outDir, i + '.png'))
     )
